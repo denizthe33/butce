@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bütçe">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon512.png">
+<meta name="theme-color" content="#1f7a4d">
+<title>Kasım Bütçesi</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column, the remaining budget as a slot-machine counter, entry row, ledger below */
+:root{
+  --bg:#f3f4f1; --surface:#ffffff; --fg:#17201b; --muted:#6c756f; --line:#dde1dc;
+  --accent:#1f7a4d; --warn:#b5651d; --bad:#b3362c;
+  --num:"DM Mono",ui-monospace,monospace; --sans:"Instrument Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111613; --surface:#1a201c; --fg:#e8ece9; --muted:#8d968f; --line:#2b332e;
+  --accent:#4fbf86; --warn:#e09b55; --bad:#e2665b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111613; --surface:#1a201c; --fg:#e8ece9; --muted:#8d968f; --line:#2b332e;
+  --accent:#4fbf86; --warn:#e09b55; --bad:#e2665b; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans)}
+.wrap{max-width:440px;margin:0 auto;padding-block:40px 60px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:28px}
+.top{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.hero{text-align:center;display:flex;flex-direction:column;gap:10px}
+.label{font-size:13px;color:var(--muted)}
+.slot{display:flex;justify-content:center;align-items:flex-end;font-family:var(--num);font-weight:500;
+  font-size:clamp(56px,18vw,84px);line-height:1;height:1em;overflow:hidden;color:var(--fg);transition:color .4s}
+.slot.warn{color:var(--warn)} .slot.bad{color:var(--bad)}
+.col{height:1em;overflow:hidden;display:inline-block}
+.reel{display:flex;flex-direction:column;transition:transform 1.1s cubic-bezier(.2,.9,.25,1)}
+.reel span{height:1em;display:block}
+.sep{display:inline-block;width:.35em;text-align:center}
+.cur{font-size:.4em;margin-left:.15em;color:var(--muted);align-self:flex-end;padding-bottom:.12em}
+.bar{height:4px;background:var(--line);border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);transition:width 1.1s cubic-bezier(.2,.9,.25,1)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;color:var(--muted)}
+.stats b{display:block;font-family:var(--num);font-size:18px;font-weight:500;color:var(--fg);font-variant-numeric:tabular-nums}
+.stats div:last-child{text-align:right}
+.form{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:8px}
+input{flex:1;min-width:0;font:500 22px var(--num);padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--fg)}
+input:focus{outline:2px solid var(--accent);outline-offset:1px}
+button{font:600 15px var(--sans);border:0;border-radius:12px;cursor:pointer}
+.go{padding:0 22px;background:var(--accent);color:var(--bg)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:8px 14px;background:transparent;border:1px solid var(--line);color:var(--muted);font-weight:500;font-size:13px;border-radius:999px}
+.chip[aria-pressed="true"]{border-color:var(--fg);color:var(--fg)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.list{display:flex;flex-direction:column}
+.list h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500;margin:0 0 8px}
+.item{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-top:1px solid var(--line);font-size:14px;gap:12px}
+.item small{color:var(--muted);margin-left:8px}
+.item .amt{font-family:var(--num);font-variant-numeric:tabular-nums}
+.del{background:none;color:var(--muted);padding:4px 6px;font-size:16px}
+.empty{color:var(--muted);font-size:14px;padding:12px 0;border-top:1px solid var(--line)}
+.foot{display:flex;justify-content:center}
+.reset{background:none;color:var(--muted);font-size:13px;text-decoration:underline;padding:6px}
+@media (prefers-reduced-motion:reduce){.reel,.bar i{transition:none}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="top"><span>6 Kas – 5 Ara</span><span id="daysLeft"></span></div>
+
+  <section class="hero">
+    <div class="label">Kalan bütçe</div>
+    <div class="slot" id="slot" aria-live="polite"></div>
+    <div class="bar"><i id="bar"></i></div>
+  </section>
+
+  <div class="stats">
+    <div>Harcanan<b id="spent">0</b></div>
+    <div>Haftalık hak<b id="daily">0</b></div>
+  </div>
+
+  <div class="form" id="f">
+    <div class="row">
+      <input id="amt" inputmode="decimal" placeholder="Tutar" autocomplete="off" aria-label="Harcama tutarı">
+      <button class="go" type="button" id="go">Düş</button>
+    </div>
+    <div class="chips" id="chips">
+      <button type="button" class="chip" aria-pressed="true">Market</button>
+      <button type="button" class="chip" aria-pressed="false">Yakıt</button>
+      <button type="button" class="chip" aria-pressed="false">Keyif</button>
+      <button type="button" class="chip" aria-pressed="false">Diğer</button>
+    </div>
+  </div>
+
+  <section class="list">
+    <h2>Harcamalar</h2>
+    <div id="items"></div>
+  </section>
+
+  <div class="foot"><button class="reset" id="reset" type="button">Yeni ay başlat</button></div>
+</div>
+
+<script>
+const BUDGET=30000, END=new Date(2026,11,5,23,59), KEY="butce-kasim-2026";
+let items=[]; try{items=JSON.parse(localStorage.getItem(KEY))||[]}catch(e){}
+let cat="Market", confirmReset=false;
+const fmt=n=>Math.round(n).toLocaleString("tr-TR");
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(items))}catch(e){}};
+
+const slot=document.getElementById("slot");
+function renderSlot(n){
+  const neg=n<0, s=fmt(Math.abs(n));
+  const chars=(neg?"-":"")+s;
+  const needRebuild=slot.dataset.len!==String(chars.length);
+  if(needRebuild){
+    slot.innerHTML="";
+    for(const ch of chars){
+      if(/\d/.test(ch)){
+        const col=document.createElement("span");col.className="col";
+        const reel=document.createElement("span");reel.className="reel";
+        for(let r=0;r<3;r++)for(let d=0;d<10;d++){const x=document.createElement("span");x.textContent=d;reel.appendChild(x)}
+        col.appendChild(reel);slot.appendChild(col);
+      }else{const x=document.createElement("span");x.className="sep";x.textContent=ch;slot.appendChild(x)}
+    }
+    const c=document.createElement("span");c.className="cur";c.textContent="₺";slot.appendChild(c);
+    slot.dataset.len=chars.length;
+  }
+  const reels=[...slot.querySelectorAll(".reel")], digits=chars.replace(/\D/g,"");
+  reels.forEach((r,i)=>{
+    const d=+digits[i], prev=r.dataset.d;
+    // spin a full loop when the digit changes, landing in the last copy
+    const target=(prev!==undefined && +prev!==d)?20+d:10+d;
+    if(prev!==undefined && +prev!==d){r.style.transition="none";r.style.transform=`translateY(-${(10+ +prev)}em)`;r.offsetHeight;r.style.transition=""}
+    r.style.transform=`translateY(-${target}em)`;r.dataset.d=d;
+    setTimeout(()=>{r.style.transition="none";r.style.transform=`translateY(-${10+d}em)`;r.offsetHeight;r.style.transition=""},1200+i*0);
+  });
+  slot.classList.toggle("warn",n>=0&&n<BUDGET*.2);
+  slot.classList.toggle("bad",n<0);
+  slot.setAttribute("aria-label",`Kalan ${chars} lira`);
+}
+
+function render(){
+  const spent=items.reduce((a,b)=>a+b.a,0), left=BUDGET-spent;
+  const now=new Date(), days=Math.max(1,Math.ceil((END-now)/864e5));
+  renderSlot(left);
+  document.getElementById("bar").style.width=Math.max(0,Math.min(100,left/BUDGET*100))+"%";
+  document.getElementById("spent").textContent=fmt(spent)+" ₺";
+  document.getElementById("daily").textContent=(left>0?fmt(left/Math.max(1,days/7)):0)+" ₺";
+  document.getElementById("daysLeft").textContent=days+" gün kaldı";
+  const box=document.getElementById("items");
+  if(!items.length){box.innerHTML='<div class="empty">Henüz harcama yok. İlk tutarı yukarıya yazın.</div>';return}
+  box.innerHTML="";
+  [...items].reverse().forEach(it=>{
+    const row=document.createElement("div");row.className="item";
+    const d=new Date(it.t).toLocaleDateString("tr-TR",{day:"numeric",month:"short"});
+    row.innerHTML=`<span>${it.c}<small>${d}</small></span><span style="display:flex;align-items:center;gap:6px"><span class="amt">−${fmt(it.a)} ₺</span><button class="del" aria-label="Sil">×</button></span>`;
+    row.querySelector(".del").onclick=()=>{items=items.filter(x=>x!==it);save();render()};
+    box.appendChild(row);
+  });
+}
+
+document.getElementById("chips").addEventListener("click",e=>{
+  const b=e.target.closest(".chip");if(!b)return;
+  document.querySelectorAll(".chip").forEach(c=>c.setAttribute("aria-pressed",c===b));cat=b.textContent;
+});
+function add(){
+  const inp=document.getElementById("amt");
+  const v=parseFloat(inp.value.replace(/\./g,"").replace(",","."));
+  if(!(v>0)){inp.focus();return}
+  items.push({a:v,c:cat,t:Date.now()});save();inp.value="";inp.blur();render();
+}
+document.getElementById("go").addEventListener("click",add);
+document.getElementById("amt").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();add()}});
+const rb=document.getElementById("reset");
+rb.onclick=()=>{
+  if(!confirmReset){confirmReset=true;rb.textContent="Emin misin? Tekrar dokun";setTimeout(()=>{confirmReset=false;rb.textContent="Yeni ay başlat"},3000);return}
+  items=[];save();confirmReset=false;rb.textContent="Yeni ay başlat";render();
+};
+render();
+</script>
+</body>
+</html>
